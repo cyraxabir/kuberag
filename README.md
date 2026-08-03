@@ -344,4 +344,4 @@ MIT License — see [LICENSE](LICENSE) for details.
 
 ---
 
-*Built by the Infra Team — "Automate everything. Question anything."*
+*"Automate everything. Question anything."*
