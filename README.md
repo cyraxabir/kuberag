@@ -22,7 +22,7 @@
               KubeRAG answers instantly
 using real cluster data, no kubectl required.
 ```
-
+![architecture](./ss-rag.png)
 ---
 
 ## ✨ Features
