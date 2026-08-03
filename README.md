@@ -206,7 +206,7 @@ LLM_URL=https://your-ollama-server/api/v1/chat/completions
 LLM_MODEL=qwen3:8b
 
 # Qdrant
-QDRANT_HOST=10.10.200.98
+QDRANT_HOST=<server-ip>
 QDRANT_PORT=6333
 ```
 
