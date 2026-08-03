@@ -1,0 +1,13 @@
+{
+  "name": "k8s-ai-monitoring-system",
+  "version": "1.0.0",
+  "scripts": {
+    "test": "npx playwright test --config=tests/e2e/playwright.config.ts",
+    "test:single": "npx playwright test --config=tests/e2e/playwright.config.ts -g",
+    "screenshots": "npx playwright test --config=scripts/screenshot.config.ts"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.49.0",
+    "@types/node": "^22.0.0"
+  }
+}

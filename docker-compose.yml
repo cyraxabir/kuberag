@@ -1,0 +1,85 @@
+services:
+
+  n8n:
+    image: n8nio/n8n:latest
+    #
+    user: "1000:1000"
+    #
+    ports:
+      - "5678:5678"
+    environment:
+      - N8N_BASIC_AUTH_ACTIVE=true
+      - N8N_BASIC_AUTH_USER=admin
+      - N8N_BASIC_AUTH_PASSWORD=admin
+      - N8N_SECURE_COOKIE=false
+    depends_on:
+      - qdrant
+      - kafka
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./data/n8n:/home/node/.n8n
+      #- n8n_data:/home/node/.n8n
+  qdrant:
+    image: qdrant/qdrant:latest
+    ports:
+      - "6333:6333"
+    volumes:
+      - ./data/qdrant:/qdrant/storage
+
+  kafka:
+    #image: confluentinc/cp-kafka:latest
+    image: confluentinc/cp-kafka:7.6.0 #can be used bitnami/kafka:3.6
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      CLUSTER_ID: Ak1F_A09TmqoaO_XHZMvEw
+    volumes:
+      - ./data/kafka:/var/lib/kafka/data
+
+  debezium:
+    image: quay.io/debezium/connect:3.0
+    ports:
+      - "8083:8083"
+    depends_on:
+      - kafka
+    environment:
+      BOOTSTRAP_SERVERS: kafka:9092
+      GROUP_ID: 1
+      CONFIG_STORAGE_TOPIC: debezium_configs
+      OFFSET_STORAGE_TOPIC: debezium_offsets
+      STATUS_STORAGE_TOPIC: debezium_status
+      CONNECT_REST_ADVERTISED_HOST_NAME: debezium
+      CONNECT_REST_PORT: 8083
+    volumes:
+      - ./data/debezium:/kafka/data
+
+  k8s-watcher:
+    build:
+      context: ./k8s-watcher
+    depends_on:
+      - kafka
+    ports:
+      - "8085:8080"
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      KAFKA_TOPIC: k8s-resources
+      KUBECONFIG: /root/.kube/config
+      # kind binds to 127.0.0.1; from inside Docker use host.docker.internal
+      #K8S_SERVER: https://host.docker.internal:51883
+    volumes:
+      - ${HOME}/.kube/config:/root/.kube/config:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped

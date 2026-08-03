@@ -1,0 +1,255 @@
+{
+  "name": "AI_K8s_Flow",
+  "nodes": [
+    {
+      "parameters": {
+        "public": true,
+        "options": {}
+      },
+      "id": "0e4b0a70-aa1d-49ae-9b2d-e8075d68cedc",
+      "name": "Chat Trigger",
+      "type": "@n8n/n8n-nodes-langchain.chatTrigger",
+      "typeVersion": 1,
+      "position": [
+        -320,
+        0
+      ],
+      "webhookId": "k8s-ai-chat"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://chat.ollama-endpoint.com/ollama/api/embeddings",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpBearerAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'nomic-embed-text', prompt: $json.chatInput }) }}",
+        "options": {}
+      },
+      "id": "84d7818f-6a18-40b0-ad68-25f6456087bd",
+      "name": "Generate Embedding",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        -64,
+        0
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "uP5KGUPYcYPXQRDN",
+          "name": "Chat.oss"
+        },
+        "httpBearerAuth": {
+          "id": "KO5HmCQw1qErpoKa",
+          "name": "Bearer Auth caht.oss"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:6333/collections/k8s/points/search",
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={\n  \"vector\": {{ JSON.stringify($items(\"Generate Embedding\")[0].json.embedding) }},\n  \"limit\": 30,\n  \"with_payload\": true,\n  \"score_threshold\": 0.3\n}",
+        "options": {}
+      },
+      "id": "9361f9e9-11af-4376-b282-e4636a25ba52",
+      "name": "Qdrant Search",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        448,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const results = $json.result || [];\nconst query = $('Chat Trigger').first().json.chatInput;\n\nconst SYSTEM_PROMPT = `You are an expert Kubernetes AI assistant integrated with a RAG system.\n\nRules:\n- ONLY answer based on the retrieved context provided. Never hallucinate cluster state.\n- If context is empty or irrelevant, respond exactly: \"No indexed Kubernetes resources found in vector database.\"\n- Use markdown tables for structured/aggregated data.\n- Do not expose internal resource_uid values.\n- Be concise and technical.`;\n\nlet userMessage;\nif (results.length === 0) {\n  userMessage = `No resources were retrieved from the vector database.\\n\\nUser question: ${query}`;\n} else {\n  const ctx = results\n    .map((r, i) => {\n      const p = r.payload;\n      const spec = p.raw_spec_json ? p.raw_spec_json.substring(0, 300) : '{}';\n      const labels = JSON.stringify(p.labels || {});\n      return `[${i + 1}] kind=${p.kind}  name=${p.name}  namespace=${p.namespace || '(cluster-scoped)'}  labels=${labels}  score=${r.score.toFixed(3)}  spec=${spec}`;\n    })\n    .join('\\n');\n  userMessage = `Retrieved ${results.length} Kubernetes resources:\\n\\n${ctx}\\n\\nUser question: ${query}`;\n}\n\nreturn [{ json: { system_prompt: SYSTEM_PROMPT, user_message: userMessage } }];"
+      },
+      "id": "e5899bb1-18b6-4a26-8183-ef6c6fac70f4",
+      "name": "Build Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        672,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://chat.ollama-endpoint.com/api/v1/chat/completions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpBearerAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'qwen3:8b', messages: [ { role: 'system', content: $json.system_prompt }, { role: 'user', content: $json.user_message } ], stream: false, options: { temperature: 0.1 }, think: false }) }}",
+        "options": {}
+      },
+      "id": "c872b15c-df1a-4a8e-9675-613153c6d962",
+      "name": "LLM Chat",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        848,
+        144
+      ],
+      "credentials": {
+        "httpBearerAuth": {
+          "id": "KO5HmCQw1qErpoKa",
+          "name": "Bearer Auth caht.oss"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const r = $input.first().json;\nconst text = r?.choices?.[0]?.message?.content || r?.message?.content || r?.response || 'No response from LLM.';\nreturn [{ json: { output: text } }];"
+      },
+      "id": "d2941e3a-1b7a-42e8-b877-926eb4e03930",
+      "name": "Format Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1104,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpBearerAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ \n  model: \"llama-3.1-8b-instant\",\n  messages: [\n    { role: \"system\", content: $json.system_prompt },\n    { role: \"user\", content: $json.user_message }\n  ],\n  temperature: 0.1\n}) }}",
+        "options": {}
+      },
+      "id": "40900a58-e48b-4b1e-a601-c8ea46501e2e",
+      "name": "LLM Groq",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        880,
+        -192
+      ],
+      "credentials": {
+        "httpBearerAuth": {
+          "id": "L4is3UmQngEtqxpF",
+          "name": "Bearer Groq"
+        },
+        "httpHeaderAuth": {
+          "id": "ZcthShnRwGgum9sd",
+          "name": "GPT-Auth_Key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "updates": [
+          "message"
+        ],
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -320,
+        -176
+      ],
+      "id": "c22417df-0792-43ba-8278-6541be39110e",
+      "name": "Telegram Trigger",
+      "webhookId": "e7ba7f86-479d-47f0-82ff-df8a342db97a",
+      "credentials": {
+        "telegramApi": {
+          "id": "FuW6kafbFRn6T5Lm",
+          "name": "Telegram account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Chat Trigger": {
+      "main": [
+        [
+          {
+            "node": "Generate Embedding",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Embedding": {
+      "main": [
+        [
+          {
+            "node": "Qdrant Search",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Qdrant Search": {
+      "main": [
+        [
+          {
+            "node": "Build Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Prompt": {
+      "main": [
+        [
+          {
+            "node": "LLM Groq",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "LLM Chat": {
+      "main": [
+        []
+      ]
+    },
+    "LLM Groq": {
+      "main": [
+        [
+          {
+            "node": "Format Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Response": {
+      "main": [
+        []
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "64eb667c-aa40-4793-a57f-2c553aac58f8",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "41574c2beb9232684f85e2aacdba5b99ca18f38a7c62b3fef63687eef5f22547"
+  },
+  "id": "iUL63oPA6pV0OIpV",
+  "tags": []
+}

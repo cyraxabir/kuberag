@@ -1,0 +1,232 @@
+{
+  "name": "CDC_K8s_Flow",
+  "nodes": [
+    {
+      "parameters": {
+        "topic": "k8s-resources",
+        "groupId": "n8n-cdc-consumer",
+        "options": {
+          "allowAutoTopicCreation": false
+        }
+      },
+      "id": "84dc7e8c-527d-489f-999e-9e437205166b",
+      "name": "Kafka Trigger",
+      "type": "n8n-nodes-base.kafkaTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "credentials": {
+        "kafka": {
+          "id": "33OiK9v980cSdmSv",
+          "name": "Kafka account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// The Kafka trigger delivers the raw message string in .message\nconst raw = $input.first().json;\nlet data;\ntry {\n  data = typeof raw.message === 'string' ? JSON.parse(raw.message) : raw;\n} catch (_) {\n  data = raw;\n}\n\n// Use embed_text from watcher if present; build one otherwise\nlet embed_text = data.embed_text;\nif (!embed_text) {\n  const ns = data.namespace || 'cluster-scoped';\n  const scope = data.namespace ? `in namespace ${data.namespace}` : 'cluster-scoped';\n  const labels = Object.entries(data.labels || {}).slice(0,5).map(([k,v])=>`${k}=${v}`).join(', ') || 'none';\n  embed_text = `Kubernetes ${data.kind} named ${data.name} ${scope}. Labels: ${labels}. Spec: ${(data.raw_spec_json||'{}').substring(0,600)}`;\n}\n\nreturn [{ json: { ...data, embed_text } }];"
+      },
+      "id": "f2a9fa93-3727-45a1-a715-cb1606f7c2d8",
+      "name": "Parse Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://server-ip:6333/collections/k8s/points/delete",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ points: [$('Parse Message').first().json.resource_uid] }) }}",
+        "options": {}
+      },
+      "id": "7ea96437-89dd-44e4-839d-f1896d2d989b",
+      "name": "Delete Existing Vector",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        448,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "is-delete-check",
+              "leftValue": "={{ $('Parse Message').first().json.event_type }}",
+              "rightValue": "DELETED",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "6bd66dec-2daa-4c1c-a148-709e84897ee1",
+      "name": "Is Delete Event?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        672,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://chat.ollama-endpoint.com/ollama/api/embeddings",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpBearerAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'nomic-embed-text:latest', prompt: $('Parse Message').first().json.embed_text }) }}",
+        "options": {}
+      },
+      "id": "b458a94b-516c-4c7a-92c3-9822e41087e0",
+      "name": "Generate Embedding",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        880,
+        128
+      ],
+      "credentials": {
+        "httpBearerAuth": {
+          "id": "KO5HmCQw1qErpoKa",
+          "name": "Bearer Auth caht.oss"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const embedding = $input.first().json.embedding;\nconst src = $('Parse Message').first().json;\n\nreturn [{\n  json: {\n    points: [{\n      id: src.resource_uid,\n      vector: embedding,\n      payload: {\n        resource_uid: src.resource_uid,\n        kind:          src.kind,\n        api_version:   src.api_version,\n        namespace:     src.namespace,\n        name:          src.name,\n        labels:        src.labels,\n        annotations:   src.annotations,\n        raw_spec_json: src.raw_spec_json,\n        last_updated_timestamp: src.last_updated_timestamp\n      }\n    }]\n  }\n}];"
+      },
+      "id": "e98a6cd0-10e7-4290-953b-2a3e77ec8277",
+      "name": "Build Qdrant Point",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1104,
+        128
+      ]
+    },
+    {
+      "parameters": {
+        "method": "PUT",
+        "url": "http://server-ip:6333/collections/k8s/points",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "id": "2f5af0a8-18e7-4438-99db-b6bb4e198493",
+      "name": "Insert Vector",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1328,
+        128
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Kafka Trigger": {
+      "main": [
+        [
+          {
+            "node": "Parse Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Message": {
+      "main": [
+        [
+          {
+            "node": "Delete Existing Vector",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Delete Existing Vector": {
+      "main": [
+        [
+          {
+            "node": "Is Delete Event?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Delete Event?": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Generate Embedding",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Embedding": {
+      "main": [
+        [
+          {
+            "node": "Build Qdrant Point",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Qdrant Point": {
+      "main": [
+        [
+          {
+            "node": "Insert Vector",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "a49ab932-81d1-4288-9b88-44e7bd030fa1",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "41574c2beb9232684f85e2aacdba5b99ca18f38a7c62b3fef63687eef5f22547"
+  },
+  "id": "gi3015zfvMCPObvI",
+  "tags": []
+}

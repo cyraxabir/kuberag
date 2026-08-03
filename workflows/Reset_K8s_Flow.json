@@ -1,0 +1,142 @@
+{
+  "name": "Reset_K8s_Flow",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "k8s-reset",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "626a31ff-7243-4653-ac58-3da90482ce62",
+      "name": "Reset Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "k8s-reset"
+    },
+    {
+      "parameters": {
+        "method": "DELETE",
+        "url": "http://qdrant:6333/collections/k8s",
+        "options": {}
+      },
+      "id": "bde6214c-69b9-4f25-a2b9-7e47a682c66b",
+      "name": "Delete Qdrant Collection",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        224,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "PUT",
+        "url": "http://qdrant:6333/collections/k8s",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={ \"vectors\": { \"size\": 768, \"distance\": \"Cosine\" }, \"optimizers_config\": { \"default_segment_number\": 2 }, \"replication_factor\": 1 }",
+        "options": {}
+      },
+      "id": "98abbc64-c020-406f-867e-b82aba531afc",
+      "name": "Recreate Qdrant Collection",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        448,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://k8s-watcher:8080/resync",
+        "options": {}
+      },
+      "id": "5c7ff543-f3d2-49b7-bae2-80e8996bec33",
+      "name": "Trigger Resync",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        672,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const ts = new Date().toISOString();\nreturn [{ json: { status: 'ok', message: 'Qdrant collection cleared and k8s-watcher resync triggered. Vector database will repopulate within ~30 seconds.', reset_at: ts } }];"
+      },
+      "id": "f49e4599-b1b2-4497-a98f-a8a7c31b0e0c",
+      "name": "Format Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        0
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Reset Webhook": {
+      "main": [
+        [
+          {
+            "node": "Delete Qdrant Collection",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Delete Qdrant Collection": {
+      "main": [
+        [
+          {
+            "node": "Recreate Qdrant Collection",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Recreate Qdrant Collection": {
+      "main": [
+        [
+          {
+            "node": "Trigger Resync",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Trigger Resync": {
+      "main": [
+        [
+          {
+            "node": "Format Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "9c136a6c-2369-4ba3-9520-fff38541341d",
+  "meta": {
+    "instanceId": "41574c2beb9232684f85e2aacdba5b99ca18f38a7c62b3fef63687eef5f22547"
+  },
+  "id": "ttE3dGiKSKpIWaGb",
+  "tags": []
+}

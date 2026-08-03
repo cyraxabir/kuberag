@@ -1,0 +1,12 @@
+{
+  "name": "k8s-etcd-connector",
+  "config": {
+    "connector.class": "io.debezium.connector.mongodb.MongoDbConnector",
+    "tasks.max": "1",
+    "mongodb.hosts": "etcd:27017",
+    "mongodb.name": "k8s_cluster",
+    "collection.include.list": "resources",
+    "topic.prefix": "k8s",
+    "snapshot.mode": "initial"
+  }
+}
