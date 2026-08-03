@@ -126,20 +126,7 @@ sudo chown -R 1000:1000 data/
 docker compose up -d
 ```
 
-### 5. Import n8n workflows
-
-```bash
-# Wait for n8n to start
-sleep 20
-
-docker cp workflows/CDC_K8s_Flow.json   kuberag-n8n-1:/tmp/
-docker cp workflows/AI_K8s_Flow.json    kuberag-n8n-1:/tmp/
-docker cp workflows/Reset_K8s_Flow.json kuberag-n8n-1:/tmp/
-
-docker exec kuberag-n8n-1 n8n import:workflow --input=/tmp/CDC_K8s_Flow.json
-docker exec kuberag-n8n-1 n8n import:workflow --input=/tmp/AI_K8s_Flow.json
-docker exec kuberag-n8n-1 n8n import:workflow --input=/tmp/Reset_K8s_Flow.json
-```
+### 5. Import n8n workflows after login from UI
 
 ### 6. Configure n8n credentials
 
