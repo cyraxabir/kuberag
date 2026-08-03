@@ -179,11 +179,10 @@ kuberag/
 │   ├── AI_K8s_Flow.json        # Query pipeline
 │   └── Reset_K8s_Flow.json     # Re-index pipeline
 ├── data/                       # Persistent volumes (gitignored)
-│   ├── kafka/
-│   ├── qdrant/
-│   └── n8n/
-└── docs/
-    └── architecture.png
+    ├── kafka/
+    ├── qdrant/
+    └── n8n/
+
 ```
 
 ---
@@ -212,7 +211,7 @@ QDRANT_PORT=6333
 
 ### Switching LLM Providers
 
-In the **AI_K8s_Flow** → **LLM Chat** node, change the URL and model:
+In the **AI_K8s_Flow** → **LLM Chat** node, change the URL and model according to your choice (for fast reply use groq/gpt/claude api):
 
 | Provider | URL | Model |
 |---|---|---|
@@ -245,27 +244,6 @@ In the **AI_K8s_Flow** → **LLM Chat** node, change the URL and model:
 | **Reset_K8s_Flow** | POST /webhook/k8s-reset | Wipe and re-index all resources |
 
 ---
-
-## 🌐 Nginx Configuration (Optional)
-
-To expose n8n via HTTPS domain:
-
-```nginx
-server {
-    listen 443 ssl;
-    server_name your-domain.com;
-
-    location / {
-        proxy_pass http://localhost:5678;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection "upgrade";
-        proxy_set_header Host $host;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_read_timeout 300s;
-    }
-}
-```
 
 Add to n8n environment:
 ```yaml
